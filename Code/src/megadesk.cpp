@@ -1,6 +1,9 @@
 #include <EEPROM.h>
 #include "lin.h"
 #include "megadesk.h"
+#include <avr/wdt.h>
+#include <avr/power.h>
+#include <avr/sleep.h>
 
 #define HYSTERESIS 137
 #define PIN_UP 10
@@ -421,7 +424,10 @@ void loop()
     up(false);
 
   // Wait before next cycle. 150ms on factory controller, 25ms seems fine.
-  delay_until(25);
+  //delay_until(25);
+  
+  // Sleep for 32ms
+  sleepyTime();
 }
 
 void linBurst()
@@ -811,4 +817,33 @@ void toggleIdleParameter()
   }
 
   EEPROM.write(2, LIN_MOTOR_IDLE);
+}
+
+void sleepyTime()
+{
+  // disable ADC
+  ADCSRA = 0;
+
+  power_spi_disable();
+  power_usart0_disable();
+  power_timer2_disable();
+  power_twi_disable();
+
+  // clear various "reset" flags
+  MCUSR = 0;
+
+  // allow changes, disable reset
+  WDTCSR = bit(WDE);
+
+  // set interrupt mode and an interval
+  // WDTCSR = bit(WDIE) | bit(WDP0); // set WDIE, 16ms delay
+  WDTCSR = bit(WDIE) | bit(WDP0); // set WDIE, 32ms delay
+  wdt_reset();                                // pat the dog
+
+  set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+  noInterrupts(); // timed sequence follows
+  sleep_enable();
+  interrupts(); // guarantees next instruction executed
+  sleep_cpu();
+  sleep_disable();
 }

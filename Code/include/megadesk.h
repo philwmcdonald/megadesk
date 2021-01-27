@@ -42,3 +42,4 @@ void toggleIdleParameter();
 
 int loadMemory(uint8_t memorySlot);
 void saveMemory(uint8_t memorySlot, int value);
+void sleepyTime();
