@@ -56,10 +56,8 @@ int targetHeight = -1;
 unsigned long end, d;
 unsigned long t = 0;
 
-#if defined MINMAX
 int maxHeight = DANGER_MAX_HEIGHT;
 int minHeight = DANGER_MIN_HEIGHT;
-#endif
 
 // Set default to 96 but this might be change from EEPROM
 byte LIN_MOTOR_IDLE = 96;
@@ -70,11 +68,13 @@ State state = State::OFF;
 State lastState = State::OFF;
 uint16_t enc_target;
 
+#if defined SERIALCOMMS
+int oldHeight = -1;
+
 const int numBytes = 4;
 byte receivedBytes[numBytes];
 byte newData = false;
 
-#if defined SERIALCOMMS
 const char command_increase = '+';
 const char command_decrease = '-';
 const char command_absolute = '=';
@@ -331,14 +331,26 @@ void parseData()
   }
   else if (command == command_write)
   {
+    // if position not set, then set to currentHeight
     if (position == 0)
     {
-      saveMemory(push_addr, currentHeight);
+      position = currentHeight;
     }
-    else
+
+    // save position to memory location
+    saveMemory(push_addr, position);
+
+#if defined MINMAX
+    //if changing memory location for min/max height, update corect variable
+    if (push_addr == 20)
     {
-      saveMemory(push_addr, position);
+      minHeight = position;
     }
+    else if (push_addr == 22)
+    {
+      maxHeight = position;
+    }
+#endif
   }
   else if (command == command_load)
   {
@@ -347,7 +359,7 @@ void parseData()
   }
   else if (command == command_read)
   {
-    writeSerial(command_read, BitShiftCombine(EEPROM.read(2 * push_addr), EEPROM.read((2 * push_addr) + 1)), push_addr);
+    writeSerial(command_read, BitShiftCombine(EEPROM.read((2 * push_addr) + 1), EEPROM.read(2 * push_addr)), push_addr);
   }
 }
 #endif
@@ -355,6 +367,19 @@ void parseData()
 void loop()
 {
   linBurst();
+
+#if defined SERIALCOMMS
+#if !defined MINMAX || (FLASHEND-FLASHSTART+1 > 8192)
+  if (memoryMoving == false && oldHeight != currentHeight){
+    if (oldHeight < currentHeight){
+      writeSerial(command_increase, currentHeight-oldHeight, pushCount);
+    }
+    else {
+      writeSerial(command_decrease, oldHeight-currentHeight, pushCount);
+    }
+  }
+#endif
+#endif
 
   readButtons();
 
@@ -391,7 +416,7 @@ void loop()
       toggleMaxHeight();
     }
 #endif
-    else if (pushCount > 0)
+    else if (pushCount > 1)
     {
       if (pushLong)
       {
@@ -424,32 +449,22 @@ void loop()
   {
     memoryMoving = false;
     targetHeight = currentHeight + HYSTERESIS + 1;
-#if defined SERIALCOMMS
-    writeSerial(command_increase, HYSTERESIS + 1);
-#endif
   }
   else if (goDown)
   {
     memoryMoving = false;
     targetHeight = currentHeight - HYSTERESIS - 1;
-#if defined SERIALCOMMS
-    writeSerial(command_decrease, HYSTERESIS - 1);
-#endif
   }
-  else if (!memoryMoving)
+  else if (!memoryMoving){
+    if (oldHeight != currentHeight){
+      writeSerial(command_absolute, currentHeight);
+    }
     targetHeight = currentHeight;
+  }
 
-#if defined MINMAX
   if (targetHeight > currentHeight && abs(targetHeight - currentHeight) > HYSTERESIS && currentHeight < maxHeight)
-#else
-  if (targetHeight > currentHeight && abs(targetHeight - currentHeight) > HYSTERESIS && currentHeight < DANGER_MAX_HEIGHT)
-#endif
     up(true);
-#if defined MINMAX
   else if (targetHeight < currentHeight && abs(targetHeight - currentHeight) > HYSTERESIS && currentHeight > minHeight)
-#else
-  else if (targetHeight < currentHeight && abs(targetHeight - currentHeight) > HYSTERESIS && currentHeight > DANGER_MIN_HEIGHT)
-#endif
     down(true);
   else
   {
@@ -461,6 +476,10 @@ void loop()
   // Override all logic above and disable if we aren't initialized yet.
   if (targetHeight < 5)
     up(false);
+
+#if defined SERIALCOMMS
+  oldHeight = currentHeight;
+#endif
 
   // Wait before next cycle. 150ms on factory controller, 25ms seems fine.
   delay_until(25);
@@ -567,21 +586,13 @@ void linBurst()
     }
     break;
   case State::UP:
-#if defined MINMAX
     if (user_cmd != Command::UP || currentHeight >= maxHeight)
-#else
-    if (user_cmd != Command::UP || currentHeight >= DANGER_MAX_HEIGHT)
-#endif
     {
       state = State::STOPPING1;
     }
     break;
   case State::DOWN:
-#if defined MINMAX
     if (user_cmd != Command::DOWN || currentHeight <= minHeight)
-#else
-    if (user_cmd != Command::DOWN || currentHeight <= DANGER_MIN_HEIGHT)
-#endif
     {
       state = State::STOPPING1;
     }
@@ -824,8 +835,8 @@ void initAndReadEEPROM(bool force)
     
 #if defined MINMAX
     // reset max/min height
-    EEPROM.write(40, minHeight);
-    EEPROM.write(44, maxHeight);
+    EEPROM.put(40, minHeight);
+    EEPROM.put(44, maxHeight);
 #endif
   }
 
@@ -888,13 +899,10 @@ void toggleMinHeight()
     minHeight = DANGER_MIN_HEIGHT;
   }
   
-  beep(1, 2093);
-  delay(50);
-  beep(1, 2349);
-  delay(50);
-  beep(1, minHeight);
+  //Min height change sound
+  beep(4, minHeight); // tone based upon new minHeight
 
-  EEPROM.write(40, minHeight);
+  EEPROM.put(40, minHeight);
 }
 
 // Swap the maxHeight values and save in EEPROM
@@ -910,12 +918,9 @@ void toggleMaxHeight()
     maxHeight = DANGER_MAX_HEIGHT;
   }
 
-  beep(1, 2093);
-  delay(50);
-  beep(1, 2349);
-  delay(50);
-  beep(1, maxHeight);
+  //Max height change sound
+  beep(4, maxHeight); // tone based upon new maxHeight
 
-  EEPROM.write(44, maxHeight);
+  EEPROM.put(44, maxHeight);
 }
 #endif
