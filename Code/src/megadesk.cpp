@@ -738,18 +738,20 @@ void loop()
   else if (manualMove == Command::UP)
   {
     memoryMoving = false;
-    // max() allows escape from recalibration (below DANGER_MIN_HEIGHT)
-    targetHeight = max(currentHeight + MOVE_OFFSET, DANGER_MIN_HEIGHT);
+    // max() allows escape from recalibration (below minHeight)
+    // min() to not exceed upper limit
+    targetHeight = min(maxHeight, max(currentHeight + MOVE_OFFSET, minHeight));
   }
   else if (manualMove == Command::DOWN)
   {
     memoryMoving = false;
-    // min() allows descend if beyond DANGER_MAX_HEIGHT
-    targetHeight = min(currentHeight - MOVE_OFFSET, DANGER_MAX_HEIGHT);
+    // min() allows descend if beyond maxHeight
+    // max() to not exceed lower limit
+    targetHeight = max(minHeight, min(currentHeight - MOVE_OFFSET, maxHeight));
   }
 
   // avoid moving toward an out-of-bounds position
-  if ((targetHeight < DANGER_MIN_HEIGHT) || (targetHeight > DANGER_MAX_HEIGHT)) {
+  if ((targetHeight < minHeight) || (targetHeight > maxHeight)) {
 #if (defined SERIALCOMMS && defined SERIALERRORS)
     writeSerial(response_error, targetHeight); // Indicate an error and the bad targetHeight
 #endif
@@ -757,13 +759,13 @@ void loop()
   }
 
   // Turn on motors?
-  if (targetHeight > currentHeight + HYSTERESIS && currentHeight < maxHeight) {
+  if (targetHeight > currentHeight + HYSTERESIS && currentHeight + HYSTERESIS < maxHeight) {
 #if (defined SERIALCOMMS && defined DEBUGHEIGHT)
     writeSerial(response_up, targetHeight);
 #endif
     MOTOR_UP;
   }
-  else if (targetHeight < currentHeight - HYSTERESIS && currentHeight > minHeight) {
+  else if (targetHeight < currentHeight - HYSTERESIS && currentHeight - HYSTERESIS > minHeight) {
 #if (defined SERIALCOMMS && defined DEBUGHEIGHT)
     writeSerial(response_down, targetHeight);
 #endif
