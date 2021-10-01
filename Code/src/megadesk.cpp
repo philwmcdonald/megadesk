@@ -595,11 +595,11 @@ void parseData(byte command, uint16_t position, uint8_t push_addr)
     //if changing memory location for min/max height, update correct variable
     if (push_addr == MIN_HEIGHT_SLOT)
     {
-      minHeight = position;
+      minHeight = max( position, DANGER_MIN_HEIGHT);
     }
     else if (push_addr == MAX_HEIGHT_SLOT)
     {
-      maxHeight = position;
+      maxHeight = min( position, DANGER_MAX_HEIGHT);
     }
 #endif
   }
@@ -755,6 +755,7 @@ void loop()
 #if (defined SERIALCOMMS && defined SERIALERRORS)
     writeSerial(response_error, targetHeight); // Indicate an error and the bad targetHeight
 #endif
+    playTone(NOTE_A4, PIP_DURATION);
     targetHeight = currentHeight; // abandon target
   }
 
@@ -1340,7 +1341,7 @@ void initAndReadEEPROM(bool force)
 #ifdef MINMAX
   // retrieve max/min height
   minHeight = eepromGet16(MIN_HEIGHT_SLOT);
-  maxHeight = eepromGet16(MAX_HEIGHT_SLOT);
+  maxHeight = min( eepromGet16(MAX_HEIGHT_SLOT), DANGER_MAX_HEIGHT);
   // check if invalid and fix/beep ...
   if (minHeight == 0) toggleMinHeight();
   if (maxHeight == 0) toggleMaxHeight();
@@ -1356,11 +1357,9 @@ void initAndReadEEPROM(bool force)
 // Swap the minHeight values and save in EEPROM
 void toggleMinHeight()
 {
-  // no bounds checks for < DANGER_MIN_HEIGHT!
-
   if (minHeight == DANGER_MIN_HEIGHT)
   {
-    minHeight = currentHeight;
+    minHeight = max( currentHeight, DANGER_MIN_HEIGHT);
     // provide more feedback when setting than clearing
     beep(minHeight, 4);
   }
@@ -1377,11 +1376,9 @@ void toggleMinHeight()
 // Swap the maxHeight values and save in EEPROM
 void toggleMaxHeight()
 {
-  // no bounds checks for > DANGER_MAX_HEIGHT!
-
   if (maxHeight == DANGER_MAX_HEIGHT)
   {
-    maxHeight = currentHeight;
+    maxHeight = min( currentHeight, DANGER_MAX_HEIGHT);
     // provide more feedback when setting than clearing
     beep(maxHeight, 4);
   }
